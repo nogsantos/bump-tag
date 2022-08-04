@@ -5,8 +5,8 @@ set -o pipefail
 # config
 default_semvar_bump=${DEFAULT_BUMP:-minor}
 with_v=${WITH_V:-false}
-release_branches=${RELEASE_BRANCHES:-master,main}
-custom_tag=${CUSTOM_TAG}
+release_branches=${RELEASE_BRANCHES:-main}
+custom_tag=${CUSTOM_TAG:-""}
 source=${SOURCE:-.}
 dryrun=${DRY_RUN:-false}
 initial_version=${INITIAL_VERSION:-0.0.0}
@@ -15,22 +15,22 @@ suffix=${PRERELEASE_SUFFIX:-beta}
 verbose=${VERBOSE:-true}
 verbose=${VERBOSE:-true}
 
-# since https://github.blog/2022-04-12-git-security-vulnerability-announced/ runner uses?
-# git config --global --add safe.directory /github/workspace
+# since https://github.blog/2022-04-12-git-security-vulnerability-announced/
+git config --global --add safe.directory /github/workspace
 
 cd "${GITHUB_WORKSPACE}/${source}" || exit
 
-echo "*** CONFIGURATION ***"
-echo -e "\tDEFAULT_BUMP: ${default_semvar_bump}"
-echo -e "\tWITH_V: ${with_v}"
-echo -e "\tRELEASE_BRANCHES: ${release_branches}"
-echo -e "\tCUSTOM_TAG: ${custom_tag}"
-echo -e "\tSOURCE: ${source}"
-echo -e "\tDRY_RUN: ${dryrun}"
-echo -e "\tINITIAL_VERSION: ${initial_version}"
-echo -e "\tTAG_CONTEXT: ${tag_context}"
-echo -e "\tPRERELEASE_SUFFIX: ${suffix}"
-echo -e "\tVERBOSE: ${verbose}"
+echo "CONFIGURATION:"
+echo -e " - DEFAULT_BUMP: ${default_semvar_bump}"
+echo -e " - WITH_V: ${with_v}"
+echo -e " - RELEASE_BRANCHES: ${release_branches}"
+echo -e " - CUSTOM_TAG: ${custom_tag}"
+echo -e " - SOURCE: ${source}"
+echo -e " - DRY_RUN: ${dryrun}"
+echo -e " - INITIAL_VERSION: ${initial_version}"
+echo -e " - TAG_CONTEXT: ${tag_context}"
+echo -e " - PRERELEASE_SUFFIX: ${suffix}"
+echo -e " - VERBOSE: ${verbose}"
 
 current_branch=$(git rev-parse --abbrev-ref HEAD)
 
@@ -92,7 +92,7 @@ commit=$(git rev-parse HEAD)
 
 if [ "$tag_commit" == "$commit" ]; then
     echo "No new commits since previous tag. Skipping..."
-    echo ::set-output name=tag::$tag
+    echo ::set-output name=tag::"$tag"
     exit 0
 fi
 
@@ -160,34 +160,13 @@ fi
 
 echo ::set-output name=tag::"$new"
 
+dt=$(date '+%Y-%m-%dT%H:%M:%SZ')
+
 # create local git tag
-git tag "$new"
+git tag -a "$new" -m "New tag ${dt}"
 
 # push new tag ref to github
-dt=$(date '+%Y-%m-%dT%H:%M:%SZ')
 full_name=$GITHUB_REPOSITORY
-git_refs_url=$(jq .repository.git_refs_url "$GITHUB_EVENT_PATH" | tr -d '"' | sed 's/{\/sha}//g')
-
 echo "$dt: **pushing tag $new to repo $full_name"
-
-git_refs_response=$(
-curl -s -X POST "$git_refs_url" \
--H "Authorization: token $GITHUB_TOKEN" \
--d @- << EOF
-
-{
-  "ref": "refs/tags/$new",
-  "sha": "$commit"
-}
-EOF
-)
-
-git_ref_posted=$( echo "${git_refs_response}" | jq .ref | tr -d '"' )
-
-echo "::debug::${git_refs_response}"
-if [ "${git_ref_posted}" = "refs/tags/${new}" ]; then
-  exit 0
-else
-  echo "::error::Tag was not created properly."
-  exit 1
-fi
+git push origin "$new"
+exit 0
